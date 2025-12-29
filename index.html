@@ -16,18 +16,45 @@
     <div class="container">
         <div class="card mt-4">
             <div class="card-body">
-                <h5 class="card-title">Generate VSIX Download Link</h5>
-                <div class="mb-3">
-                    <label for="marketplaceUrl" class="form-label">Marketplace URL</label>
-                    <input type="text" id="marketplaceUrl" class="form-control" placeholder="e.g., https://marketplace.visualstudio.com/items?itemName=ms-python.python">
+                <h5 class="card-title mb-3">Generate VSIX Download Link</h5>
+
+                <ul class="nav nav-tabs mb-3" id="modeTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-pane" type="button" role="tab" aria-controls="search-pane" aria-selected="true">Search</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="url-tab" data-bs-toggle="tab" data-bs-target="#url-pane" type="button" role="tab" aria-controls="url-pane" aria-selected="false">By URL</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="modeTabsContent">
+                    <!-- Search Pane -->
+                    <div class="tab-pane fade show active" id="search-pane" role="tabpanel" aria-labelledby="search-tab">
+                        <div class="input-group mb-3">
+                            <input type="text" id="searchInput" class="form-control" placeholder="Search extensions (e.g., python, prettier, theme)">
+                            <button class="btn btn-primary" id="searchBtn">Search</button>
+                        </div>
+                        <div id="searchResults" class="list-group mb-3"></div>
+                    </div>
+
+                    <!-- URL Pane -->
+                    <div class="tab-pane fade" id="url-pane" role="tabpanel" aria-labelledby="url-tab">
+                        <div class="mb-3">
+                            <label for="marketplaceUrl" class="form-label">Marketplace URL</label>
+                            <input type="text" id="marketplaceUrl" class="form-control" placeholder="e.g., https://marketplace.visualstudio.com/items?itemName=ms-python.python">
+                        </div>
+                        <button id="urlGetVersionsBtn" class="btn btn-primary mb-3">Get Versions</button>
+                    </div>
                 </div>
+
+                <!-- Common Section -->
+                <hr>
                 <div class="mb-3">
                     <label for="version" class="form-label">Version</label>
                     <select id="version" class="form-select" disabled>
-                        <option selected>Enter URL to load versions</option>
+                        <option selected>Select an extension or enter URL first</option>
                     </select>
                 </div>
-                <button id="generateBtn" class="btn btn-primary">Get Versions</button>
             </div>
         </div>
         <div id="loading" class="text-center mt-4" style="display: none;">
@@ -42,6 +69,7 @@
             <span class="text-muted">Made with ❤️</span>
         </div>
     </footer>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
