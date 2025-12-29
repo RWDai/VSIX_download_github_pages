@@ -3,6 +3,31 @@ document.getElementById('urlGetVersionsBtn').addEventListener('click', getVersio
 document.getElementById('searchBtn').addEventListener('click', performSearch);
 document.getElementById('version').addEventListener('change', generateDownloadLink);
 
+// Mode Toggle Listeners
+document.querySelectorAll('input[name="inputMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        const mode = e.target.id; // modeSearch or modeUrl
+        toggleMode(mode);
+    });
+});
+
+function toggleMode(modeId) {
+    const searchSection = document.getElementById('search-section');
+    const urlSection = document.getElementById('url-section');
+    
+    // Clear results/inputs when switching to reduce confusion? 
+    // Or keep them? Let's keep them for now, but maybe reset the "common" area if needed.
+    // For now, simple visibility toggle.
+    
+    if (modeId === 'modeSearch') {
+        searchSection.classList.remove('d-none');
+        urlSection.classList.add('d-none');
+    } else {
+        searchSection.classList.add('d-none');
+        urlSection.classList.remove('d-none');
+    }
+}
+
 // Allow Enter key to trigger actions
 document.getElementById('marketplaceUrl').addEventListener('keypress', function (e) {
     if (e.key === 'Enter') getVersionsFromUrl();
