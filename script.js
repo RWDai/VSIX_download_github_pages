@@ -1,12 +1,26 @@
+// State management
+let extensionInfo = {};
+let searchState = {
+    query: '',
+    pageNumber: 1,
+    pageSize: 10,
+    totalCount: 0
+};
+let autocompleteTimeout = null;
+let autocompleteActiveIndex = -1;
+
 // Event Listeners
 document.getElementById('urlGetVersionsBtn').addEventListener('click', getVersionsFromUrl);
-document.getElementById('searchBtn').addEventListener('click', performSearch);
+document.getElementById('searchBtn').addEventListener('click', () => performSearch(1));
 document.getElementById('version').addEventListener('change', generateDownloadLink);
+document.getElementById('prevPageBtn').addEventListener('click', () => performSearch(searchState.pageNumber - 1));
+document.getElementById('nextPageBtn').addEventListener('click', () => performSearch(searchState.pageNumber + 1));
+document.getElementById('pasteBtn').addEventListener('click', pasteFromClipboard);
 
 // Mode Toggle Listeners
 document.querySelectorAll('input[name="inputMode"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
-        const mode = e.target.id; // modeSearch or modeUrl
+        const mode = e.target.id;
         toggleMode(mode);
     });
 });
@@ -14,11 +28,7 @@ document.querySelectorAll('input[name="inputMode"]').forEach(radio => {
 function toggleMode(modeId) {
     const searchSection = document.getElementById('search-section');
     const urlSection = document.getElementById('url-section');
-    
-    // Clear results/inputs when switching to reduce confusion? 
-    // Or keep them? Let's keep them for now, but maybe reset the "common" area if needed.
-    // For now, simple visibility toggle.
-    
+
     if (modeId === 'modeSearch') {
         searchSection.classList.remove('d-none');
         urlSection.classList.add('d-none');
@@ -33,11 +43,129 @@ document.getElementById('marketplaceUrl').addEventListener('keypress', function 
     if (e.key === 'Enter') getVersionsFromUrl();
 });
 document.getElementById('searchInput').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') performSearch();
+    if (e.key === 'Enter') {
+        hideAutocomplete();
+        performSearch(1);
+    }
 });
 
+// Autocomplete input handler
+document.getElementById('searchInput').addEventListener('input', function (e) {
+    const query = e.target.value.trim();
 
-let extensionInfo = {};
+    if (autocompleteTimeout) {
+        clearTimeout(autocompleteTimeout);
+    }
+
+    if (query.length < 2) {
+        hideAutocomplete();
+        return;
+    }
+
+    autocompleteTimeout = setTimeout(() => {
+        fetchAutocomplete(query);
+    }, 300);
+});
+
+// Hide autocomplete when clicking outside
+document.addEventListener('click', function (e) {
+    const dropdown = document.getElementById('autocompleteDropdown');
+    const searchInput = document.getElementById('searchInput');
+    if (!dropdown.contains(e.target) && e.target !== searchInput) {
+        hideAutocomplete();
+    }
+});
+
+// Keyboard navigation for autocomplete
+document.getElementById('searchInput').addEventListener('keydown', function (e) {
+    const dropdown = document.getElementById('autocompleteDropdown');
+    if (dropdown.classList.contains('d-none')) return;
+
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        autocompleteActiveIndex = Math.min(autocompleteActiveIndex + 1, items.length - 1);
+        updateAutocompleteActive(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        autocompleteActiveIndex = Math.max(autocompleteActiveIndex - 1, 0);
+        updateAutocompleteActive(items);
+    } else if (e.key === 'Escape') {
+        hideAutocomplete();
+    } else if (e.key === 'Enter' && autocompleteActiveIndex >= 0) {
+        e.preventDefault();
+        items[autocompleteActiveIndex].click();
+    }
+});
+
+function updateAutocompleteActive(items) {
+    items.forEach((item, idx) => {
+        item.classList.toggle('active', idx === autocompleteActiveIndex);
+    });
+}
+
+// URL input real-time parsing
+document.getElementById('marketplaceUrl').addEventListener('input', function (e) {
+    const value = e.target.value.trim();
+    parseAndPreviewUrl(value);
+});
+
+function parseAndPreviewUrl(value) {
+    const urlPreview = document.getElementById('urlPreview');
+    const urlPreviewText = document.getElementById('urlPreviewText');
+
+    if (!value) {
+        urlPreview.classList.add('d-none');
+        return;
+    }
+
+    const parsed = parseExtensionInput(value);
+    if (parsed) {
+        urlPreviewText.textContent = `${parsed.publisher}.${parsed.extensionName}`;
+        urlPreview.classList.remove('d-none');
+    } else {
+        urlPreview.classList.add('d-none');
+    }
+}
+
+function parseExtensionInput(input) {
+    // Try parsing as URL first
+    try {
+        const urlObject = new URL(input);
+        const itemName = urlObject.searchParams.get('itemName');
+        if (itemName && itemName.includes('.')) {
+            const [publisher, extensionName] = itemName.split('.');
+            return { publisher, extensionName };
+        }
+    } catch (e) {
+        // Not a URL, try as extension ID
+    }
+
+    // Try parsing as extension ID (publisher.extension)
+    if (input.includes('.') && !input.includes('/') && !input.includes(':')) {
+        const parts = input.split('.');
+        if (parts.length >= 2) {
+            const publisher = parts[0];
+            const extensionName = parts.slice(1).join('.');
+            return { publisher, extensionName };
+        }
+    }
+
+    return null;
+}
+
+async function pasteFromClipboard() {
+    try {
+        const text = await navigator.clipboard.readText();
+        const urlInput = document.getElementById('marketplaceUrl');
+        urlInput.value = text;
+        parseAndPreviewUrl(text);
+    } catch (err) {
+        console.error('Failed to read clipboard:', err);
+    }
+}
 
 // --- Semantic Versioning Comparison ---
 function compareVersions(v1, v2) {
@@ -48,25 +176,79 @@ function compareVersions(v1, v2) {
         const p1 = parts1[i] || 0;
         const p2 = parts2[i] || 0;
 
-        if (p1 > p2) return -1; // v1 is newer (descending order)
-        if (p1 < p2) return 1;  // v2 is newer (descending order)
+        if (p1 > p2) return -1;
+        if (p1 < p2) return 1;
     }
-    return 0; // versions are equal
+    return 0;
 }
 
+// --- Autocomplete Functionality ---
 
-// --- Search Functionality ---
+async function fetchAutocomplete(query) {
+    const dropdown = document.getElementById('autocompleteDropdown');
+    dropdown.innerHTML = '<div class="autocomplete-loading">Searching...</div>';
+    dropdown.classList.remove('d-none');
+    autocompleteActiveIndex = -1;
 
-async function performSearch() {
+    try {
+        const results = await searchMarketplace(query, 1, 6);
+        renderAutocomplete(results.extensions);
+    } catch (error) {
+        dropdown.innerHTML = '<div class="autocomplete-loading text-danger">Error loading suggestions</div>';
+    }
+}
+
+function renderAutocomplete(extensions) {
+    const dropdown = document.getElementById('autocompleteDropdown');
+
+    if (extensions.length === 0) {
+        dropdown.innerHTML = '<div class="autocomplete-loading">No results found</div>';
+        return;
+    }
+
+    dropdown.innerHTML = '';
+    extensions.forEach(ext => {
+        const iconUrl = ext.versions && ext.versions[0] && ext.versions[0].files
+            ? ext.versions[0].files.find(f => f.assetType === 'Microsoft.VisualStudio.Services.Icons.Default')?.source
+            : 'https://via.placeholder.com/24';
+
+        const item = document.createElement('div');
+        item.className = 'autocomplete-item';
+        item.innerHTML = `
+            <img src="${iconUrl}" alt="icon">
+            <div class="autocomplete-item-info">
+                <div class="autocomplete-item-name">${ext.displayName}</div>
+                <div class="autocomplete-item-publisher">${ext.publisher.displayName}</div>
+            </div>
+        `;
+        item.onclick = () => {
+            hideAutocomplete();
+            selectExtension(ext.publisher.publisherName, ext.extensionName, ext.displayName);
+        };
+        dropdown.appendChild(item);
+    });
+}
+
+function hideAutocomplete() {
+    const dropdown = document.getElementById('autocompleteDropdown');
+    dropdown.classList.add('d-none');
+    dropdown.innerHTML = '';
+    autocompleteActiveIndex = -1;
+}
+
+// --- Search Functionality with Pagination ---
+
+async function performSearch(pageNumber = 1) {
     const query = document.getElementById('searchInput').value.trim();
     const searchResultsDiv = document.getElementById('searchResults');
     const loadingDiv = document.getElementById('loading');
-    
+    const paginationDiv = document.getElementById('pagination');
+
     // Clear previous state
     searchResultsDiv.innerHTML = '';
+    paginationDiv.classList.add('d-none');
     document.getElementById('result').innerHTML = '';
     resetVersionSelect();
-    // hideSelectedInfo(); // No longer needed as we moved selected info to dropdown
 
     if (!query) {
         searchResultsDiv.innerHTML = '<div class="alert alert-warning">Please enter a search term.</div>';
@@ -74,10 +256,14 @@ async function performSearch() {
     }
 
     loadingDiv.style.display = 'block';
+    searchState.query = query;
+    searchState.pageNumber = pageNumber;
 
     try {
-        const results = await searchMarketplace(query);
-        renderSearchResults(results);
+        const results = await searchMarketplace(query, pageNumber, searchState.pageSize);
+        searchState.totalCount = results.totalCount;
+        renderSearchResults(results.extensions);
+        updatePagination();
     } catch (error) {
         searchResultsDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
     } finally {
@@ -85,20 +271,19 @@ async function performSearch() {
     }
 }
 
-async function searchMarketplace(text) {
+async function searchMarketplace(text, pageNumber = 1, pageSize = 10) {
     const apiUrl = 'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery';
     const body = {
         filters: [{
             criteria: [
-                { filterType: 10, value: text } // FilterType.Target = 10
+                { filterType: 10, value: text }
             ],
-            pageNumber: 1,
-            pageSize: 20,
-            sortBy: 0, // Relevance
+            pageNumber: pageNumber,
+            pageSize: pageSize,
+            sortBy: 0,
             sortOrder: 0
         }],
-        // Flags: IncludeFiles(2) + IncludeCategoryAndTags(4) + ExcludeNonValidated(256)
-        flags: 0x2 | 0x4 | 0x100 
+        flags: 0x2 | 0x4 | 0x100
     };
 
     const response = await fetch(apiUrl, {
@@ -115,15 +300,18 @@ async function searchMarketplace(text) {
     }
 
     const data = await response.json();
-    if (data.results && data.results[0] && data.results[0].extensions) {
-        return data.results[0].extensions;
+    if (data.results && data.results[0]) {
+        return {
+            extensions: data.results[0].extensions || [],
+            totalCount: data.results[0].resultMetadata?.find(m => m.metadataType === 'ResultCount')?.metadataItems?.find(i => i.name === 'TotalCount')?.count || 0
+        };
     }
-    return [];
+    return { extensions: [], totalCount: 0 };
 }
 
 function renderSearchResults(extensions) {
     const searchResultsDiv = document.getElementById('searchResults');
-    
+
     if (extensions.length === 0) {
         searchResultsDiv.innerHTML = '<div class="alert alert-info">No extensions found.</div>';
         return;
@@ -132,12 +320,11 @@ function renderSearchResults(extensions) {
     extensions.forEach(ext => {
         const item = document.createElement('button');
         item.className = 'list-group-item list-group-item-action';
-        
-        // Ensure that ext.versions[0] exists before trying to access its properties
-        const iconUrl = ext.versions && ext.versions[0] && ext.versions[0].files 
-                        ? ext.versions[0].files.find(f => f.assetType === 'Microsoft.VisualStudio.Services.Icons.Default')?.source 
+
+        const iconUrl = ext.versions && ext.versions[0] && ext.versions[0].files
+                        ? ext.versions[0].files.find(f => f.assetType === 'Microsoft.VisualStudio.Services.Icons.Default')?.source
                         : 'https://via.placeholder.com/40';
-        
+
         item.innerHTML = `
             <div class="d-flex w-100 justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
@@ -150,51 +337,65 @@ function renderSearchResults(extensions) {
             </div>
             <p class="mb-1 mt-2 small text-truncate">${ext.shortDescription || 'No description available.'}</p>
         `;
-        
+
         item.onclick = () => selectExtension(ext.publisher.publisherName, ext.extensionName, ext.displayName);
         searchResultsDiv.appendChild(item);
     });
 }
 
+function updatePagination() {
+    const paginationDiv = document.getElementById('pagination');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    const pageInfo = document.getElementById('pageInfo');
+
+    const totalPages = Math.ceil(searchState.totalCount / searchState.pageSize);
+
+    if (totalPages <= 1) {
+        paginationDiv.classList.add('d-none');
+        return;
+    }
+
+    paginationDiv.classList.remove('d-none');
+
+    prevBtn.disabled = searchState.pageNumber <= 1;
+    nextBtn.disabled = searchState.pageNumber >= totalPages;
+
+    const startItem = (searchState.pageNumber - 1) * searchState.pageSize + 1;
+    const endItem = Math.min(searchState.pageNumber * searchState.pageSize, searchState.totalCount);
+    pageInfo.textContent = `${startItem}-${endItem} of ${searchState.totalCount}`;
+}
+
 async function selectExtension(publisher, extensionName, displayName) {
     extensionInfo = { publisher, extensionName };
     updateVersionSelectPlaceholder(displayName || `${publisher}.${extensionName}`);
-    
+
     await fetchAndPopulateVersions(publisher, extensionName);
 }
 
 // --- URL Functionality ---
 
 async function getVersionsFromUrl() {
-    const url = document.getElementById('marketplaceUrl').value;
+    const input = document.getElementById('marketplaceUrl').value.trim();
     const resultDiv = document.getElementById('result');
-    
+
     resetVersionSelect();
     resultDiv.innerHTML = '';
 
-    if (!url) {
-        resultDiv.innerHTML = '<div class="alert alert-danger">Please enter a URL.</div>';
+    if (!input) {
+        resultDiv.innerHTML = '<div class="alert alert-danger">Please enter a URL or extension ID.</div>';
         return;
     }
 
-    try {
-        const urlObject = new URL(url);
-        const itemName = urlObject.searchParams.get('itemName');
-
-        if (!itemName) {
-            resultDiv.innerHTML = '<div class="alert alert-danger">Invalid URL. Make sure it contains an "itemName".</div>';
-            return;
-        }
-
-        const [publisher, extensionName] = itemName.split('.');
-        extensionInfo = { publisher, extensionName };
-        
-        updateVersionSelectPlaceholder(itemName);
-        await fetchAndPopulateVersions(publisher, extensionName);
-
-    } catch (error) {
-        resultDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+    const parsed = parseExtensionInput(input);
+    if (!parsed) {
+        resultDiv.innerHTML = '<div class="alert alert-danger">Invalid input. Use full URL or extension ID (publisher.extension).</div>';
+        return;
     }
+
+    extensionInfo = parsed;
+    updateVersionSelectPlaceholder(`${parsed.publisher}.${parsed.extensionName}`);
+    await fetchAndPopulateVersions(parsed.publisher, parsed.extensionName);
 }
 
 // --- Common Logic ---
@@ -232,7 +433,7 @@ async function fetchAndPopulateVersions(publisher, extensionName) {
                 versionSelect.appendChild(option);
             });
             versionSelect.disabled = false;
-            generateDownloadLink(); // Generate for the latest version initially
+            generateDownloadLink();
         } else {
             versionSelect.innerHTML = '<option selected>No versions found</option>';
         }
@@ -271,8 +472,8 @@ async function fetchExtensionVersions(publisher, extensionName) {
     const data = await response.json();
     if (data.results && data.results[0] && data.results[0].extensions && data.results[0].extensions[0] && data.results[0].extensions[0].versions) {
         let versions = data.results[0].extensions[0].versions.map(v => v.version);
-        versions.sort(compareVersions); // Sort versions in descending order
-        return versions; 
+        versions.sort(compareVersions);
+        return versions;
     }
 
     return [];

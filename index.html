@@ -31,20 +31,51 @@
 
                 <!-- Search Section -->
                 <div id="search-section">
-                    <div class="input-group mb-3">
-                        <input type="text" id="searchInput" class="form-control" placeholder="Search extensions (e.g., python, prettier, theme)">
-                        <button class="btn btn-primary" id="searchBtn">Search</button>
+                    <div class="position-relative mb-3">
+                        <div class="input-group">
+                            <input type="text" id="searchInput" class="form-control" placeholder="Search extensions (e.g., python, prettier, theme)" autocomplete="off">
+                            <button class="btn btn-primary" id="searchBtn">Search</button>
+                        </div>
+                        <!-- Autocomplete dropdown -->
+                        <div id="autocompleteDropdown" class="autocomplete-dropdown d-none"></div>
                     </div>
                     <div id="searchResults" class="list-group mb-3"></div>
+                    <!-- Pagination -->
+                    <nav id="pagination" class="d-none" aria-label="Search results pagination">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <button class="btn btn-outline-secondary btn-sm" id="prevPageBtn" disabled>
+                                &laquo; Previous
+                            </button>
+                            <span id="pageInfo" class="text-muted small"></span>
+                            <button class="btn btn-outline-secondary btn-sm" id="nextPageBtn" disabled>
+                                Next &raquo;
+                            </button>
+                        </div>
+                    </nav>
                 </div>
 
                 <!-- URL Section -->
                 <div id="url-section" class="d-none">
                     <div class="mb-3">
-                        <label for="marketplaceUrl" class="form-label">Marketplace URL</label>
+                        <label for="marketplaceUrl" class="form-label">Marketplace URL or Extension ID</label>
                         <div class="input-group">
-                            <input type="text" id="marketplaceUrl" class="form-control" placeholder="e.g., https://marketplace.visualstudio.com/items?itemName=ms-python.python">
+                            <input type="text" id="marketplaceUrl" class="form-control" placeholder="e.g., ms-python.python or full URL">
+                            <button id="pasteBtn" class="btn btn-outline-secondary" title="Paste from clipboard">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                                </svg>
+                            </button>
                             <button id="urlGetVersionsBtn" class="btn btn-primary">Get Versions</button>
+                        </div>
+                        <div id="urlPreview" class="mt-2 d-none">
+                            <small class="text-success">
+                                <span id="urlPreviewIcon">&#10003;</span>
+                                Detected: <strong id="urlPreviewText"></strong>
+                            </small>
+                        </div>
+                        <div id="urlHint" class="form-text">
+                            Accepts full URL or extension ID (publisher.extension)
                         </div>
                     </div>
                 </div>
